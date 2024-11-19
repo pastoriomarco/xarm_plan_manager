@@ -163,10 +163,20 @@ bool PlanManager::executeJointMovement(
     const std::vector<float>& scaling_factors
 ) {
     for (int attempt = 0; attempt < max_retries_ && rclcpp::ok(); ++attempt) {
+
+        bool joints_reached = false;
+        rclcpp::spin_some(node_);
+        joints_reached = checkJointTargets(joint_names_ordered_, target_joint_positions);
+        if (joints_reached) {
+            break;
+        }
+
         RCLCPP_INFO(node_->get_logger(), "Attempt %d: Setting scaling factors.", attempt + 1);
         int scaling_result = set_scaling_factors(set_scaling_factors_client_, scaling_factors);
         if (scaling_result != 0) {
             RCLCPP_WARN(node_->get_logger(), "Failed to set scaling factors on attempt %d.", attempt + 1);
+            // Retry
+            continue;
         }
 
         RCLCPP_INFO(node_->get_logger(), "Attempt %d: Executing joint movement.", attempt + 1);
@@ -175,8 +185,8 @@ bool PlanManager::executeJointMovement(
         int plan_result = call_request(joint_plan_client_, joint_plan_req);
         if (plan_result != 0) {
             RCLCPP_WARN(node_->get_logger(), "Joint plan service call failed on attempt %d.", attempt + 1);
-            // Optionally, you can decide to retry or not based on the type of failure
-            // Here, we'll proceed to retry
+            // Retry
+            continue;
         }
 
         auto exec_plan_req = std::make_shared<xarm_msgs::srv::PlanExec::Request>();
@@ -184,12 +194,11 @@ bool PlanManager::executeJointMovement(
         int exec_result = call_request(exec_plan_client_, exec_plan_req);
         if (exec_result != 0) {
             RCLCPP_WARN(node_->get_logger(), "Joint execution service call failed on attempt %d.", attempt + 1);
-            // Retry immediately without waiting for target
+            // Retry
             continue;
         }
 
         // Wait until joint targets are reached or timeout
-        bool joints_reached = false;
         auto start_time = std::chrono::steady_clock::now();
         while (rclcpp::ok() && !joints_reached) {
             rclcpp::spin_some(node_);
@@ -225,6 +234,14 @@ bool PlanManager::executePoseMovement(
     const std::vector<float>& scaling_factors
 ) {
     for (int attempt = 0; attempt < max_retries_ && rclcpp::ok(); ++attempt) {
+
+        bool pose_reached = false;
+        rclcpp::spin_some(node_);
+        pose_reached = checkPoseTarget(target_pose, tf_buffer_);
+        if (pose_reached) {
+            break;
+        }
+
         RCLCPP_INFO(node_->get_logger(), "Attempt %d: Setting scaling factors.", attempt + 1);
         int scaling_result = set_scaling_factors(set_scaling_factors_client_, scaling_factors);
         if (scaling_result != 0) {
@@ -253,7 +270,6 @@ bool PlanManager::executePoseMovement(
         }
 
         // Wait until pose target is reached or timeout
-        bool pose_reached = false;
         auto start_time = std::chrono::steady_clock::now();
         while (rclcpp::ok() && !pose_reached) {
             rclcpp::spin_some(node_);
