@@ -3,7 +3,7 @@ A ROS2 repository to plan and execute a series of movements with Ufactory robot 
 
 ![xArm Logo](https://github.com/pastoriomarco/xarm_plan_manager/raw/main/assets/xarm_logo.png)
 
-**xArm Plan Manager** is a ROS 2 package designed to manage and execute movement plans for [xArm](https://www.ufactory.cc/xarm) robotic arms. Leveraging the powerful `xarm_planner` from the [xarm_ros2](https://github.com/ufactory/xarm_ros2) repository, this package provides a robust framework for executing joint and pose movements with retry logic and scaling factors.
+**xArm Plan Manager** is a ROS 2 package designed to manage and execute movement plans for [xArm](https://www.ufactory.cc/xarm) robotic arms. Leveraging the powerful xarm_planner from the [xarm_ros2](https://github.com/ufactory/xarm_ros2) repository, this package provides a robust framework for executing joint and pose movements with retry logic and scaling factors.
 
 ## Table of Contents
 
@@ -40,6 +40,38 @@ A ROS2 repository to plan and execute a series of movements with Ufactory robot 
 
 1. **Clone the Repository:**
 
-   ```bash
-   cd ~/ros2_ws/src
-   git clone https://github.com/pastoriomarco/xarm_plan_manager.git
+    ```bash
+    cd ~/ros2_ws/src
+    git clone https://github.com/pastoriomarco/xarm_plan_manager.git
+    ```
+
+2. **Install Dependencies:**
+
+    Ensure all dependencies are installed. You can use `rosdep` to install them:
+
+    ```bash
+    cd ~/ros2_ws
+    rosdep install --from-paths src --ignore-src -r -y
+    ```
+
+3. **Build the Package:**
+
+    ```bash
+    cd ~/ros2_ws
+    colcon build --packages-select xarm_plan_manager
+    ```
+
+4. **Source the Workspace:**
+
+    ```bash
+    source ~/ros2_ws/install/setup.bash
+    ```
+
+## Usage
+
+### Launch File
+
+The package provides a launch file to start the `plan_manager_node` with configurable parameters.
+
+```bash
+ros2 launch xarm_plan_manager plan_manager_launch.py
