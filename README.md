@@ -44,6 +44,7 @@ This package is designed to work with ROS2 Humble and integrates with the [xArm 
 4. Source the workspace:
 
    ```sh
+   cd ~/ros2_ws
    source install/setup.bash
    ```
 
