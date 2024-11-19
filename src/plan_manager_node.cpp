@@ -89,14 +89,14 @@ int main(int argc, char** argv)
                 tar_joint1 = {0.785, -0.0, -1.75, -0.785, 0.785, -0.785};
                 tar_joint2 = {0, 0, 0, 0, 0, 0};
                 tar_joint3 = {-0.785, -0.785, -0.75, 0.785, -0.785, 0.785};
-                tar_joint4 = {0, 0, -1.75, 0, 0, 0};
+                tar_joint4 = {0, 0, -1.57, 0, 0, 0};
             }
             else if (robot_type == "lite") {
                 // Define target joints for 'lite' 6 DOF
                 tar_joint1 = {0.785, -0.0, 1.75, -0.785, 0.785, -0.785};
                 tar_joint2 = {0, 0, 0, 0, 0, 0};
                 tar_joint3 = {-0.785, -0.785, 0.75, 0.785, -0.785, 0.785};
-                tar_joint4 = {0, 0, 1.75, 0, 0, 0};
+                tar_joint4 = {0, 0, 1.57, 0, 0, 0};
             }
         }
         break;
