@@ -3,7 +3,7 @@ A ROS2 repository to plan and execute a series of movements with Ufactory robot 
 
 ![xArm Logo](https://github.com/pastoriomarco/xarm_plan_manager/raw/main/assets/xarm_logo.png)
 
-**xArm Plan Manager** is a ROS 2 package designed to manage and execute movement plans for [xArm](https://www.ufactory.cc/xarm) robotic arms. Leveraging the powerful xarm_planner from the [xarm_ros2](https://github.com/ufactory/xarm_ros2) repository, this package provides a robust framework for executing joint and pose movements with retry logic and scaling factors.
+**xArm Plan Manager** is a ROS 2 package designed to manage and execute movement plans for [xArm](https://www.ufactory.cc/xarm) robotic arms. Leveraging the powerful `xarm_planner` from the [xarm_ros2](https://github.com/ufactory/xarm_ros2) repository, this package provides a robust framework for executing joint and pose movements with retry logic and scaling factors.
 
 ## Table of Contents
 
@@ -22,56 +22,21 @@ A ROS2 repository to plan and execute a series of movements with Ufactory robot 
 
 ## Features
 
-- **Joint Movement Execution:** Move the robot arm to specified joint positions with configurable scaling factors and retry mechanisms.
-- **Pose Movement Execution:** Move the robot arm's end-effector to specified poses with precision and reliability.
-- **Scalable Design:** Supports robots with 5, 6, or 7 degrees of freedom (DOF).
-- **Retry Logic:** Automatically retries movement executions upon failure, enhancing reliability.
-- **Timeout Handling:** Configurable timeouts for movement completion to ensure timely operations.
-- **Thread-Safe Joint State Management:** Ensures safe access to joint states across multiple threads.
-- **Flexible Scaling Factors:** Allows dynamic adjustment of movement scaling factors to control speed and precision.
+- Supports joint-based and pose-based movement planning for xArm robots.
+- Configurable DOF (5, 6, or 7), supporting different robot types (e.g., `xarm`, `lite`, `uf850`).
+- Ability to set scaling factors to control the speed of movements.
+- Retries for failed motion executions and timeout handling for reliability.
 
-## Prerequisites
+## Requirements
 
-- **ROS 2:** Ensure that you have ROS 2 [Foxy](https://docs.ros.org/en/foxy/Installation.html) or later installed.
-- **xArm ROS 2 Packages:** This package relies on the [xarm_ros2](https://github.com/ufactory/xarm_ros2) repository. Ensure that it is installed and properly configured.
-- **C++17 Compiler:** Required for building the package.
+- ROS2 Humble
+- [xarm\_ros2 Humble](https://github.com/xArm-Developer/xarm_ros2/tree/humble)
+- UFactory xArm robot (but also works with the mockup hardware xarm\_planner launcher)
 
 ## Installation
 
-1. **Clone the Repository:**
+1. Clone the repository into your ROS2 workspace:
 
-    ```bash
-    cd ~/ros2_ws/src
-    git clone https://github.com/pastoriomarco/xarm_plan_manager.git
-    ```
-
-2. **Install Dependencies:**
-
-    Ensure all dependencies are installed. You can use `rosdep` to install them:
-
-    ```bash
-    cd ~/ros2_ws
-    rosdep install --from-paths src --ignore-src -r -y
-    ```
-
-3. **Build the Package:**
-
-    ```bash
-    cd ~/ros2_ws
-    colcon build --packages-select xarm_plan_manager
-    ```
-
-4. **Source the Workspace:**
-
-    ```bash
-    source ~/ros2_ws/install/setup.bash
-    ```
-
-## Usage
-
-### Launch File
-
-The package provides a launch file to start the `plan_manager_node` with configurable parameters.
-
-```bash
-ros2 launch xarm_plan_manager plan_manager_launch.py
+   ```bash
+   cd ~/ros2_ws/src
+   git clone https://github.com/pastoriomarco/xarm_plan_manager.git
