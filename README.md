@@ -83,14 +83,6 @@ The following examples describe how the node executes a sequence of movements:
 
 Each movement uses a retry mechanism to increase reliability, ensuring the robot reaches the desired positions.
 
-## Launch File
-
-A launch file (`plan_manager.launch.py`) is provided to start the plan manager node. The launch file includes parameters for configuring the robot type and DOF.
-
-```python
-ros2 launch xarm_plan_manager xarm_plan_manager.launch.py robot_type:=xarm
-```
-
 ## Parameters
 
 - **robot\_type**: The type of the robot (`xarm`, `lite`, `uf850`).
