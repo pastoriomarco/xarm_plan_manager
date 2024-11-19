@@ -64,7 +64,7 @@ bool checkPoseTarget(const geometry_msgs::msg::Pose& target_pose,
 {
     geometry_msgs::msg::TransformStamped transformStamped;
     try {
-        // Replace "link_base" and "link_tcp" with your robot's base and end-effector frames
+        // Replace "world" and "link_tcp" with your robot's base and end-effector frames
         transformStamped = tf_buffer.lookupTransform("world", "link_tcp", tf2::TimePointZero, std::chrono::seconds(1));
     }
     catch (tf2::TransformException &ex) {
@@ -134,6 +134,8 @@ PlanManager::PlanManager(rclcpp::Node::SharedPtr node, int dof,
     pose_plan_client_ = node_->create_client<xarm_msgs::srv::PlanPose>("xarm_pose_plan");
     exec_plan_client_ = node_->create_client<xarm_msgs::srv::PlanExec>("xarm_exec_plan");
     set_scaling_factors_client_ = node_->create_client<xarm_msgs::srv::SetFloat32List>("xarm_set_scaling_factors");
+    // Initialize the new service client for linear movements
+    linear_plan_client_ = node_->create_client<xarm_msgs::srv::PlanSingleStraight>("xarm_straight_plan");
 
     // Initialize joint_names_ordered_ based on dof
     initializeJointNames(dof);
@@ -168,7 +170,8 @@ bool PlanManager::executeJointMovement(
         rclcpp::spin_some(node_);
         joints_reached = checkJointTargets(joint_names_ordered_, target_joint_positions);
         if (joints_reached) {
-            break;
+            RCLCPP_INFO(node_->get_logger(), "Joint targets already reached.");
+            return true;
         }
 
         RCLCPP_INFO(node_->get_logger(), "Attempt %d: Setting scaling factors.", attempt + 1);
@@ -239,7 +242,8 @@ bool PlanManager::executePoseMovement(
         rclcpp::spin_some(node_);
         pose_reached = checkPoseTarget(target_pose, tf_buffer_);
         if (pose_reached) {
-            break;
+            RCLCPP_INFO(node_->get_logger(), "Pose target already reached.");
+            return true;
         }
 
         RCLCPP_INFO(node_->get_logger(), "Attempt %d: Setting scaling factors.", attempt + 1);
@@ -296,6 +300,78 @@ bool PlanManager::executePoseMovement(
     }
 
     RCLCPP_ERROR(node_->get_logger(), "Failed to execute pose movement after %d attempts.", max_retries_);
+    return false;
+}
+
+// Implementation of PlanManager::executeLinearMovement
+bool PlanManager::executeLinearMovement(
+    const geometry_msgs::msg::Pose& target_pose,
+    const std::vector<float>& scaling_factors
+) {
+    for (int attempt = 0; attempt < max_retries_ && rclcpp::ok(); ++attempt) {
+
+        bool pose_reached = false;
+        rclcpp::spin_some(node_);
+        pose_reached = checkPoseTarget(target_pose, tf_buffer_);
+        if (pose_reached) {
+            RCLCPP_INFO(node_->get_logger(), "Linear movement target already reached.");
+            return true;
+        }
+
+        RCLCPP_INFO(node_->get_logger(), "Attempt %d: Setting scaling factors.", attempt + 1);
+        int scaling_result = set_scaling_factors(set_scaling_factors_client_, scaling_factors);
+        if (scaling_result != 0) {
+            RCLCPP_WARN(node_->get_logger(), "Failed to set scaling factors on attempt %d.", attempt + 1);
+            // Retry
+            continue;
+        }
+
+        RCLCPP_INFO(node_->get_logger(), "Attempt %d: Executing linear movement.", attempt + 1);
+        auto linear_plan_req = std::make_shared<xarm_msgs::srv::PlanSingleStraight::Request>();
+        linear_plan_req->target = target_pose;
+        int plan_result = call_request(linear_plan_client_, linear_plan_req);
+        if (plan_result != 0) {
+            RCLCPP_WARN(node_->get_logger(), "Linear plan service call failed on attempt %d.", attempt + 1);
+            // Retry
+            continue;
+        }
+
+        auto exec_plan_req = std::make_shared<xarm_msgs::srv::PlanExec::Request>();
+        exec_plan_req->wait = true;
+        int exec_result = call_request(exec_plan_client_, exec_plan_req);
+        if (exec_result != 0) {
+            RCLCPP_WARN(node_->get_logger(), "Linear execution service call failed on attempt %d.", attempt + 1);
+            // Retry
+            continue;
+        }
+
+        // Wait until pose target is reached or timeout
+        auto start_time = std::chrono::steady_clock::now();
+        while (rclcpp::ok() && !pose_reached) {
+            rclcpp::spin_some(node_);
+            pose_reached = checkPoseTarget(target_pose, tf_buffer_);
+            if (pose_reached) {
+                break;
+            }
+            auto elapsed = std::chrono::steady_clock::now() - start_time;
+            if (elapsed > pose_timeout_) {
+                RCLCPP_WARN(node_->get_logger(), "Timeout while waiting for linear movement to be reached on attempt %d.", attempt + 1);
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        if (pose_reached) {
+            RCLCPP_INFO(node_->get_logger(), "Linear movement reached on attempt %d.", attempt + 1);
+            return true;
+        } else {
+            RCLCPP_WARN(node_->get_logger(), "Linear movement failed on attempt %d.", attempt + 1);
+            // Retry after sleep
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    }
+
+    RCLCPP_ERROR(node_->get_logger(), "Failed to execute linear movement after %d attempts.", max_retries_);
     return false;
 }
 

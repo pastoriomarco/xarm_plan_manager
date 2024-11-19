@@ -120,8 +120,8 @@ int main(int argc, char** argv)
     // Define target poses
     geometry_msgs::msg::Pose target_pose1;
     target_pose1.position.x = 0.3;
-    target_pose1.position.y = -0.1;
-    target_pose1.position.z = 0.2;
+    target_pose1.position.y = -0.15;
+    target_pose1.position.z = 0.1;
     target_pose1.orientation.x = 1;
     target_pose1.orientation.y = 0;
     target_pose1.orientation.z = 0;
@@ -138,8 +138,8 @@ int main(int argc, char** argv)
 
     geometry_msgs::msg::Pose target_pose3;
     target_pose3.position.x = 0.1;
-    target_pose3.position.y = 0.3;
-    target_pose3.position.z = 0.1;
+    target_pose3.position.y = 0.25;
+    target_pose3.position.z = 0.15;
     target_pose3.orientation.x = 1;
     target_pose3.orientation.y = 0;
     target_pose3.orientation.z = 0;
@@ -193,12 +193,20 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // 5. tar_joint4 with high_speed
+    // 7. target_pose4 with standard_speed - linear move
+    if (!plan_manager.executeLinearMovement(target_pose2, slow_speed)) {
+        RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
+        rclcpp::shutdown();
+        return 1;
+    }
+
+    // 8. tar_joint4 with high_speed
     if (!plan_manager.executeJointMovement(tar_joint4, high_speed)) {
         RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint4 after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
     }
+
 
     RCLCPP_INFO(node->get_logger(), "Completed all movements successfully.");
     rclcpp::shutdown();

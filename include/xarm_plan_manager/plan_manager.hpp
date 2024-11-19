@@ -10,7 +10,7 @@
 #include <xarm_msgs/srv/plan_pose.hpp>
 #include <xarm_msgs/srv/plan_joint.hpp>
 #include <xarm_msgs/srv/plan_exec.hpp>
-#include <xarm_msgs/srv/plan_single_straight.hpp>
+#include <xarm_msgs/srv/plan_single_straight.hpp> // Already included
 #include <xarm_msgs/srv/set_float32_list.hpp>
 
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -84,6 +84,12 @@ public:
         const std::vector<float>& scaling_factors
     );
 
+    // New method for linear movement
+    bool executeLinearMovement(
+        const geometry_msgs::msg::Pose& target_pose,
+        const std::vector<float>& scaling_factors
+    );
+
     const std::vector<std::string>& getJointNames() const;
 
 private:
@@ -93,6 +99,8 @@ private:
     rclcpp::Client<xarm_msgs::srv::PlanPose>::SharedPtr pose_plan_client_;
     rclcpp::Client<xarm_msgs::srv::PlanExec>::SharedPtr exec_plan_client_;
     rclcpp::Client<xarm_msgs::srv::SetFloat32List>::SharedPtr set_scaling_factors_client_;
+    // New client for linear movements
+    rclcpp::Client<xarm_msgs::srv::PlanSingleStraight>::SharedPtr linear_plan_client_;
     std::chrono::seconds joint_timeout_;
     std::chrono::seconds pose_timeout_;
     int max_retries_;
