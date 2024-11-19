@@ -1,11 +1,13 @@
 #include "xarm_plan_manager/plan_manager.hpp"
 
 #include <chrono>
+#include <memory>
 
 // Mutex and shared pointer for joint states
 std::mutex joint_mutex;
 sensor_msgs::msg::JointState::SharedPtr current_joint_state;
 
+// Implementation of main
 int main(int argc, char** argv)
 {   
     rclcpp::init(argc, argv);
@@ -18,7 +20,33 @@ int main(int argc, char** argv)
     int dof;
     node->get_parameter_or("dof", dof, 7);
     RCLCPP_INFO(node->get_logger(), "namespace: %s, dof: %d", node->get_namespace(), dof);
-   
+
+    // Read the 'robot_type' parameter
+    std::string robot_type;
+    node->get_parameter_or("robot_type", robot_type, std::string("xarm"));
+    RCLCPP_INFO(node->get_logger(), "Robot Type: %s", robot_type.c_str());
+
+    // Validate 'robot_type' based on 'dof'
+    if (dof == 5 || dof == 7) {
+        if (robot_type != "xarm") {
+            RCLCPP_ERROR(node->get_logger(), "Unsupported robot_type '%s' for DOF %d. Only 'xarm' is supported for DOF 5 and 7.", robot_type.c_str(), dof);
+            rclcpp::shutdown();
+            return 1;
+        }
+    }
+    else if (dof == 6) {
+        if (robot_type != "xarm" && robot_type != "lite" && robot_type != "uf850") {
+            RCLCPP_ERROR(node->get_logger(), "Unsupported robot_type '%s' for DOF %d. Supported types: 'xarm', 'lite', 'uf850'.", robot_type.c_str(), dof);
+            rclcpp::shutdown();
+            return 1;
+        }
+    }
+    else {
+        RCLCPP_ERROR(node->get_logger(), "Unsupported DOF: %d. Supported DOFs are 5, 6, and 7. Exiting.", dof);
+        rclcpp::shutdown();
+        return 1;
+    }
+
     // Initialize PlanManager with the DOF
     PlanManager plan_manager(node, dof, std::chrono::seconds(30), std::chrono::seconds(30), 3);
 
@@ -40,14 +68,16 @@ int main(int argc, char** argv)
     }
     RCLCPP_INFO(node->get_logger(), "Received first joint state. Starting movements.");
 
-    // Define target joint positions based on DOF
+    // Define target joint positions based on DOF and robot_type
     std::vector<double> tar_joint1;
     std::vector<double> tar_joint2;
     std::vector<double> tar_joint3;
+    std::vector<double> tar_joint4;
 
     switch (dof) {
     case 5:
         {
+            // Only 'xarm' is supported for DOF 5
             tar_joint1 = {1.570796, -1.570796, -1.047198, 2.792527, -1.570796};
             tar_joint2 = {0, 0, 0, 0, 0};
             tar_joint3 = {-1.570796, -1.570796, -1.047198, -0.349066, 2.617994};
@@ -55,13 +85,24 @@ int main(int argc, char** argv)
         break;
     case 6:
         {
-            tar_joint1 = {0.785, -0.0, 1.75, -0.785, 0.785, -0.785};
-            tar_joint2 = {0, 0, 0, 0, 0, 0};
-            tar_joint3 = {-0.785, -0.785, 0.75, 0.785, -0.785, 0.785};
+            if ((robot_type == "xarm") || (robot_type == "uf850")) {
+                tar_joint1 = {0.785, -0.0, -1.75, -0.785, 0.785, -0.785};
+                tar_joint2 = {0, 0, 0, 0, 0, 0};
+                tar_joint3 = {-0.785, -0.785, -0.75, 0.785, -0.785, 0.785};
+                tar_joint4 = {0, 0, -1.75, 0, 0, 0};
+            }
+            else if (robot_type == "lite") {
+                // Define target joints for 'lite' 6 DOF
+                tar_joint1 = {0.785, -0.0, 1.75, -0.785, 0.785, -0.785};
+                tar_joint2 = {0, 0, 0, 0, 0, 0};
+                tar_joint3 = {-0.785, -0.785, 0.75, 0.785, -0.785, 0.785};
+                tar_joint4 = {0, 0, 1.75, 0, 0, 0};
+            }
         }
         break;
     case 7:
         {
+            // Only 'xarm' is supported for DOF 7
             tar_joint1 = {1.570796, -1.570796, -1.570796, 1.396263, 2.967060, 2.792527, -1.570796};
             tar_joint2 = {0, 0, 0, 0, 0, 0, 0};
             tar_joint3 = {-1.570796, -1.570796, 1.570796, 1.396263, -2.967060, -0.349066, 2.617994};
@@ -148,6 +189,13 @@ int main(int argc, char** argv)
     // 6. target_pose3 with standard_speed
     if (!plan_manager.executePoseMovement(target_pose3, standard_speed)) {
         RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose3 after retries. Exiting.");
+        rclcpp::shutdown();
+        return 1;
+    }
+
+    // 5. tar_joint4 with high_speed
+    if (!plan_manager.executeJointMovement(tar_joint4, high_speed)) {
+        RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint4 after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
     }

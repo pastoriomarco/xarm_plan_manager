@@ -4,6 +4,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
+    robot_type = LaunchConfiguration('robot_type', default="xarm")
     dof = LaunchConfiguration('dof', default=6)
 
     xarm_planner_node_test = Node(
@@ -13,6 +14,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {
+                'robot_type': robot_type,
                 'dof': dof
             },
         ],
