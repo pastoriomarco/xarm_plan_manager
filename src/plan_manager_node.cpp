@@ -2,19 +2,24 @@
 
 #include "xarm_plan_manager/plan_manager.hpp"
 
-#include <chrono>
 #include <memory>
+#include <algorithm>
+
+#include "rclcpp/rclcpp.hpp"
+#include "moveit_msgs/srv/get_planning_scene.hpp"
+#include "geometry_msgs/msg/pose.hpp"
 
 // Mutex and shared pointer for joint states
 std::mutex joint_mutex;
 sensor_msgs::msg::JointState::SharedPtr current_joint_state;
+geometry_msgs::msg::Pose selected_object_pose;
 
 // Implementation of main
 int main(int argc, char** argv)
-{   
+{
     rclcpp::init(argc, argv);
     rclcpp::NodeOptions node_options;
-    node_options.automatically_declare_parameters_from_overrides(true);    
+    node_options.automatically_declare_parameters_from_overrides(true);
     node = rclcpp::Node::make_shared("plan_manager_node", node_options);
     RCLCPP_INFO(node->get_logger(), "plan_manager_node start");
     signal(SIGINT, exit_sig_handler);
@@ -55,6 +60,45 @@ int main(int argc, char** argv)
     // Subscribe to /joint_states
     auto joint_state_sub = node->create_subscription<sensor_msgs::msg::JointState>(
         "/joint_states", 10, jointStateCallback);
+
+    // Parameter to determine which object to find
+    std::string object_name_filter;
+    node->declare_parameter<std::string>("object_name_filter", "graspable_cylinder_spawner");
+    node->get_parameter("object_name_filter", object_name_filter);
+
+    // Service client to get the planning scene
+    auto planning_scene_client = node->create_client<moveit_msgs::srv::GetPlanningScene>("/get_planning_scene");
+    while (!planning_scene_client->wait_for_service(std::chrono::seconds(1))) {
+        RCLCPP_INFO(node->get_logger(), "Waiting for the /get_planning_scene service to be available...");
+    }
+
+    // Get the planning scene
+    auto request = std::make_shared<moveit_msgs::srv::GetPlanningScene::Request>();
+    request->components.components = moveit_msgs::msg::PlanningSceneComponents::WORLD_OBJECT_GEOMETRY;
+
+    auto future = planning_scene_client->async_send_request(request);
+    if (rclcpp::spin_until_future_complete(node, future) == rclcpp::FutureReturnCode::SUCCESS) {
+        auto response = future.get();
+        const auto& collision_objects = response->scene.world.collision_objects;
+        bool object_found = false;
+
+        for (const auto& object : collision_objects) {
+            if (object.id.find(object_name_filter) != std::string::npos) {
+                // Use the main pose field instead of primitive_poses to get the correct pose
+                selected_object_pose = object.pose;
+                RCLCPP_INFO(node->get_logger(), "Found object with ID: %s", object.id.c_str());
+                RCLCPP_INFO_STREAM(node->get_logger(), "x " << selected_object_pose.position.x << ", y " << selected_object_pose.position.y << ", z " << selected_object_pose.position.z);
+                object_found = true;
+                break;
+            }
+        }
+
+        if (!object_found) {
+            RCLCPP_WARN(node->get_logger(), "No object found with filter: %s", object_name_filter.c_str());
+        }
+    } else {
+        RCLCPP_ERROR(node->get_logger(), "Failed to call service /get_planning_scene");
+    }
 
     // Wait until the first joint state is received
     RCLCPP_INFO(node->get_logger(), "Waiting for first joint state...");
@@ -147,6 +191,8 @@ int main(int argc, char** argv)
     target_pose3.orientation.z = 0;
     target_pose3.orientation.w = 0;
 
+    selected_object_pose.orientation = target_pose1.orientation;
+
     // Example scaling factors to be set between movements
     std::vector<float> slow_speed = {0.1f, 0.1f};       // Example values
     std::vector<float> standard_speed = {0.3f, 0.3f};  // Example values
@@ -161,7 +207,7 @@ int main(int argc, char** argv)
     }
 
     // 2. target_pose1 with standard_speed
-    if (!plan_manager.executePoseMovement(target_pose1, standard_speed)) {
+    if (!plan_manager.executePoseMovement(selected_object_pose, standard_speed)) {
         RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose1 after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
@@ -204,7 +250,7 @@ int main(int argc, char** argv)
     // }
 
     // 7. target_pose4 with standard_speed
-    if (!plan_manager.executePoseMovement(target_pose2, slow_speed)) {
+    if (!plan_manager.executePoseMovement(target_pose1, slow_speed)) {
         RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
@@ -216,7 +262,6 @@ int main(int argc, char** argv)
         rclcpp::shutdown();
         return 1;
     }
-
 
     RCLCPP_INFO(node->get_logger(), "Completed all movements successfully.");
     rclcpp::shutdown();
