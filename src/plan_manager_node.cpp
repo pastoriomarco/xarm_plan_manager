@@ -148,9 +148,9 @@ int main(int argc, char** argv)
     target_pose3.orientation.w = 0;
 
     // Example scaling factors to be set between movements
-    std::vector<float> slow_speed = {0.3f, 0.1f};       // Example values
-    std::vector<float> standard_speed = {0.6f, 0.4f};  // Example values
-    std::vector<float> high_speed = {0.9f, 0.7f};      // Example values
+    std::vector<float> slow_speed = {0.1f, 0.1f};       // Example values
+    std::vector<float> standard_speed = {0.3f, 0.3f};  // Example values
+    std::vector<float> high_speed = {0.5f, 0.5f};      // Example values
 
     // Execute movements with retry logic using PlanManager
     // 1. tar_joint1 with slow_speed
@@ -195,8 +195,16 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // 7. target_pose4 with standard_speed - linear move
-    if (!plan_manager.executeLinearMovement(target_pose2, slow_speed)) {
+    // not using linear moves: the robot seems to be moving at max speed despite setting the scaling factors
+    // // 7. target_pose4 with standard_speed - linear move
+    // if (!plan_manager.executeLinearMovement(target_pose2, slow_speed)) {
+    //     RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
+    //     rclcpp::shutdown();
+    //     return 1;
+    // }
+
+    // 7. target_pose4 with standard_speed
+    if (!plan_manager.executePoseMovement(target_pose2, slow_speed)) {
         RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
