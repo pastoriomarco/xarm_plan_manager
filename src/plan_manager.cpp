@@ -1,3 +1,5 @@
+// src/xarm_plan_manager/src/plan_manager.cpp
+
 #include "xarm_plan_manager/plan_manager.hpp"
 
 // Initialize the global node pointer
@@ -22,7 +24,7 @@ void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg)
 }
 
 // Implementation of checkJointTargets
-bool checkJointTargets(const std::vector<std::string>& joint_names_ordered,
+bool PlanManager::checkJointTargets(const std::vector<std::string>& joint_names_ordered,
                        const std::vector<double>& target_joint_positions,
                        double tolerance)
 {
@@ -57,15 +59,15 @@ bool checkJointTargets(const std::vector<std::string>& joint_names_ordered,
 }
 
 // Implementation of checkPoseTarget
-bool checkPoseTarget(const geometry_msgs::msg::Pose& target_pose,
+bool PlanManager::checkPoseTarget(const geometry_msgs::msg::Pose& target_pose,
                     tf2_ros::Buffer& tf_buffer,
                     double position_tolerance,
                     double orientation_tolerance)
 {
     geometry_msgs::msg::TransformStamped transformStamped;
     try {
-        // Replace "world" and "link_tcp" with your robot's base and end-effector frames
-        transformStamped = tf_buffer.lookupTransform("world", "link_tcp", tf2::TimePointZero, std::chrono::seconds(1));
+        // Use dynamic base and eef links
+        transformStamped = tf_buffer.lookupTransform(base_link_, eef_link_, tf2::TimePointZero, std::chrono::seconds(1));
     }
     catch (tf2::TransformException &ex) {
         RCLCPP_WARN(node->get_logger(), "TF lookup failed: %s", ex.what());
@@ -134,11 +136,21 @@ PlanManager::PlanManager(rclcpp::Node::SharedPtr node, int dof,
     pose_plan_client_ = node_->create_client<xarm_msgs::srv::PlanPose>("xarm_pose_plan");
     exec_plan_client_ = node_->create_client<xarm_msgs::srv::PlanExec>("xarm_exec_plan");
     set_scaling_factors_client_ = node_->create_client<xarm_msgs::srv::SetFloat32List>("xarm_set_scaling_factors");
-    // Initialize the new service client for linear movements
     linear_plan_client_ = node_->create_client<xarm_msgs::srv::PlanSingleStraight>("xarm_straight_plan");
+    
+    // Initialize the service clients for base and eef links
+    get_base_link_client_ = node_->create_client<xarm_msgs::srv::Call>("get_base_link");
+    get_eef_link_client_ = node_->create_client<xarm_msgs::srv::Call>("get_eef_link");
 
     // Initialize joint_names_ordered_ based on dof
     initializeJointNames(dof);
+
+    // Retrieve base and eef links
+    if (!retrieveBaseAndEefLinks()) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to retrieve base and eef links. Exiting.");
+        rclcpp::shutdown();
+        exit(1);
+    }
 }
 
 // Implementation of PlanManager::initializeJointNames
@@ -157,6 +169,53 @@ void PlanManager::initializeJointNames(int dof) {
     // Trim the joint names based on dof
     joint_names_ordered_ = std::vector<std::string>(all_joint_names.begin(), all_joint_names.begin() + dof);
     RCLCPP_INFO(node_->get_logger(), "Initialized joint_names_ordered_ for DOF: %d", dof);
+}
+
+// Implementation of PlanManager::retrieveBaseAndEefLinks
+bool PlanManager::retrieveBaseAndEefLinks()
+{
+    // Wait for services to be available
+    if (!get_base_link_client_->wait_for_service(std::chrono::seconds(5))) {
+        RCLCPP_ERROR(node_->get_logger(), "Service get_base_link not available.");
+        return false;
+    }
+
+    if (!get_eef_link_client_->wait_for_service(std::chrono::seconds(5))) {
+        RCLCPP_ERROR(node_->get_logger(), "Service get_eef_link not available.");
+        return false;
+    }
+
+    // Call get_base_link service
+    auto base_req = std::make_shared<xarm_msgs::srv::Call::Request>();
+    auto base_future = get_base_link_client_->async_send_request(base_req);
+    if (rclcpp::spin_until_future_complete(node_, base_future) != rclcpp::FutureReturnCode::SUCCESS) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to call service get_base_link");
+        return false;
+    }
+    auto base_res = base_future.get();
+    if (base_res->ret != 0) {
+        RCLCPP_ERROR(node_->get_logger(), "get_base_link service failed: %s", base_res->message.c_str());
+        return false;
+    }
+    base_link_ = base_res->message;
+    RCLCPP_INFO(node_->get_logger(), "Retrieved base link: %s", base_link_.c_str());
+
+    // Call get_eef_link service
+    auto eef_req = std::make_shared<xarm_msgs::srv::Call::Request>();
+    auto eef_future = get_eef_link_client_->async_send_request(eef_req);
+    if (rclcpp::spin_until_future_complete(node_, eef_future) != rclcpp::FutureReturnCode::SUCCESS) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to call service get_eef_link");
+        return false;
+    }
+    auto eef_res = eef_future.get();
+    if (eef_res->ret != 0) {
+        RCLCPP_ERROR(node_->get_logger(), "get_eef_link service failed: %s", eef_res->message.c_str());
+        return false;
+    }
+    eef_link_ = eef_res->message;
+    RCLCPP_INFO(node_->get_logger(), "Retrieved eef link: %s", eef_link_.c_str());
+
+    return true;
 }
 
 // Implementation of PlanManager::executeJointMovement

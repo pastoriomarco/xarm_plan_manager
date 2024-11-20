@@ -1,17 +1,19 @@
+// src/xarm_plan_manager/include/xarm_plan_manager/plan_manager.hpp
+
 #ifndef PLAN_MANAGER_HPP
 #define PLAN_MANAGER_HPP
 
 #include <signal.h>
 #include <thread>
-#include <algorithm>  // For std::clamp if needed
 #include <rclcpp/rclcpp.hpp>
 
 #include <std_msgs/msg/bool.hpp>
 #include <xarm_msgs/srv/plan_pose.hpp>
 #include <xarm_msgs/srv/plan_joint.hpp>
 #include <xarm_msgs/srv/plan_exec.hpp>
-#include <xarm_msgs/srv/plan_single_straight.hpp> // Already included
+#include <xarm_msgs/srv/plan_single_straight.hpp>
 #include <xarm_msgs/srv/set_float32_list.hpp>
+#include <xarm_msgs/srv/call.hpp>
 
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <geometry_msgs/msg/pose.hpp>
@@ -53,16 +55,6 @@ int set_scaling_factors(rclcpp::Client<xarm_msgs::srv::SetFloat32List>::SharedPt
 // Callback function for /joint_states subscriber
 void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
 
-// Helper functions to check targets
-bool checkJointTargets(const std::vector<std::string>& joint_names_ordered,
-                       const std::vector<double>& target_joint_positions,
-                       double tolerance = 0.05);
-
-bool checkPoseTarget(const geometry_msgs::msg::Pose& target_pose,
-                    tf2_ros::Buffer& tf_buffer,
-                    double position_tolerance = 0.05,
-                    double orientation_tolerance = 0.05);
-
 // Signal handler for graceful shutdown
 void exit_sig_handler(int signum);
 
@@ -90,17 +82,30 @@ public:
         const std::vector<float>& scaling_factors
     );
 
+    // Helper functions to check targets
+    bool checkJointTargets(const std::vector<std::string>& joint_names_ordered,
+                        const std::vector<double>& target_joint_positions,
+                        double tolerance = 0.05);
+
+    bool checkPoseTarget(const geometry_msgs::msg::Pose& target_pose,
+                        tf2_ros::Buffer& tf_buffer,
+                        double position_tolerance = 0.05,
+                        double orientation_tolerance = 0.05);
+
     const std::vector<std::string>& getJointNames() const;
 
 private:
-    // Fixed parameters
+
     rclcpp::Node::SharedPtr node_;
     rclcpp::Client<xarm_msgs::srv::PlanJoint>::SharedPtr joint_plan_client_;
     rclcpp::Client<xarm_msgs::srv::PlanPose>::SharedPtr pose_plan_client_;
     rclcpp::Client<xarm_msgs::srv::PlanExec>::SharedPtr exec_plan_client_;
     rclcpp::Client<xarm_msgs::srv::SetFloat32List>::SharedPtr set_scaling_factors_client_;
-    // New client for linear movements
+    // Client for linear movements
     rclcpp::Client<xarm_msgs::srv::PlanSingleStraight>::SharedPtr linear_plan_client_;
+    // Clients for base and eef links
+    rclcpp::Client<xarm_msgs::srv::Call>::SharedPtr get_base_link_client_;
+    rclcpp::Client<xarm_msgs::srv::Call>::SharedPtr get_eef_link_client_;
     std::chrono::seconds joint_timeout_;
     std::chrono::seconds pose_timeout_;
     int max_retries_;
@@ -111,9 +116,16 @@ private:
 
     // Joint names ordered based on DOF
     std::vector<std::string> joint_names_ordered_;
+    
+    // Retrieved base and eef links
+    std::string base_link_;
+    std::string eef_link_;
 
     // Helper method to initialize joint_names_ordered_ based on dof
     void initializeJointNames(int dof);
+
+    // Helper methods to retrieve base and eef links
+    bool retrieveBaseAndEefLinks();
 };
 
 // Template function implementations must be in the header
