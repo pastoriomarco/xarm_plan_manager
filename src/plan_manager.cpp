@@ -437,11 +437,6 @@ bool PlanManager::executeLinearMovement(
     return false;
 }
 
-// Implementation of getJointNames
-const std::vector<std::string>& PlanManager::getJointNames() const {
-    return joint_names_ordered_;
-}
-
 // Implementation of attachObject
 bool PlanManager::attachObject(const std::string& object_id) {
     // Get the collision object from the planning scene
@@ -527,62 +522,112 @@ bool PlanManager::attachObject(const std::string& object_id) {
 
 // Implementation of detachObject
 bool PlanManager::detachObject(const std::string& object_id) {
-    // Get the current pose of the eef_link in the base_link frame
-    geometry_msgs::msg::TransformStamped transformStamped;
-    try {
-        transformStamped = tf_buffer_.lookupTransform(base_link_, eef_link_, tf2::TimePointZero, std::chrono::seconds(1));
-    } catch (tf2::TransformException &ex) {
-        RCLCPP_WARN(node_->get_logger(), "TF lookup failed: %s", ex.what());
+    // 1. Get the collision object from the planning scene
+    auto request = std::make_shared<moveit_msgs::srv::GetPlanningScene::Request>();
+    request->components.components = moveit_msgs::msg::PlanningSceneComponents::ROBOT_STATE_ATTACHED_OBJECTS;
+
+    // Wait for the service and call it
+    while (!get_planning_scene_client_->wait_for_service(std::chrono::seconds(1))) {
+        if (!rclcpp::ok()) {
+            RCLCPP_ERROR(node_->get_logger(), "Interrupted while waiting for the service get_planning_scene. Exiting.");
+            return false;
+        }
+        RCLCPP_INFO(node_->get_logger(), "Waiting for service get_planning_scene...");
+    }
+
+    auto future = get_planning_scene_client_->async_send_request(request);
+    if (rclcpp::spin_until_future_complete(node_, future) != rclcpp::FutureReturnCode::SUCCESS) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to call service get_planning_scene");
         return false;
     }
 
-    // Convert Transform to Pose
-    geometry_msgs::msg::Pose object_pose;
-    object_pose.position.x = transformStamped.transform.translation.x;
-    object_pose.position.y = transformStamped.transform.translation.y;
-    object_pose.position.z = transformStamped.transform.translation.z;
-    object_pose.orientation = transformStamped.transform.rotation;
+    auto response = future.get();
+    const auto& attached_objects = response->scene.robot_state.attached_collision_objects;
 
-    // Create CollisionObject to add back to the world
+    moveit_msgs::msg::AttachedCollisionObject attached_object;
+    bool object_found = false;
+    for (const auto& attached : attached_objects) {
+        if (attached.object.id == object_id) {
+            attached_object = attached;
+            object_found = true;
+            break;
+        }
+    }
+
+    if (!object_found) {
+        RCLCPP_ERROR(node_->get_logger(), "Object with ID '%s' is not attached to the robot.", object_id.c_str());
+        return false;
+    }
+
+    // 2. Get the current transform of the object relative to the base frame
+    geometry_msgs::msg::TransformStamped transform_stamped;
+    try {
+        transform_stamped = tf_buffer_.lookupTransform(base_link_, attached_object.link_name, tf2::TimePointZero, std::chrono::seconds(1));
+    } catch (tf2::TransformException &ex) {
+        RCLCPP_ERROR(node_->get_logger(), "TF lookup failed: %s", ex.what());
+        return false;
+    }
+
+    // Convert the TransformStamped to tf2::Transform
+    tf2::Transform base_to_link;
+    tf2::fromMsg(transform_stamped.transform, base_to_link);
+
+    // Get the pose of the object relative to the link
+    geometry_msgs::msg::Pose object_pose_in_link = attached_object.object.pose;
+
+    // Convert object_pose_in_link to tf2::Transform
+    tf2::Transform link_to_object;
+    tf2::fromMsg(object_pose_in_link, link_to_object);
+
+    // Compute base_to_object = base_to_link * link_to_object
+    tf2::Transform base_to_object = base_to_link * link_to_object;
+
+    // Manually construct geometry_msgs::msg::Pose
+    geometry_msgs::msg::Pose object_pose;
+    object_pose.position.x = base_to_object.getOrigin().x();
+    object_pose.position.y = base_to_object.getOrigin().y();
+    object_pose.position.z = base_to_object.getOrigin().z();
+    object_pose.orientation.x = base_to_object.getRotation().x();
+    object_pose.orientation.y = base_to_object.getRotation().y();
+    object_pose.orientation.z = base_to_object.getRotation().z();
+    object_pose.orientation.w = base_to_object.getRotation().w();
+
+    // 3. Detach the Object from the End Effector
+    moveit_msgs::msg::AttachedCollisionObject detach_object;
+    detach_object.object.id = object_id;
+    detach_object.link_name = attached_object.link_name;
+    detach_object.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
+
+    // 4. Create a Collision Object to Add Back to the World
     moveit_msgs::msg::CollisionObject collision_object;
-    collision_object.id = attached_collision_object_.id;
+    collision_object.id = attached_object.object.id;
     collision_object.header.frame_id = base_link_;
     collision_object.pose = object_pose;
     collision_object.operation = moveit_msgs::msg::CollisionObject::ADD;
-    collision_object.primitives = attached_collision_object_.primitives;
-    collision_object.primitive_poses = attached_collision_object_.primitive_poses;
-    collision_object.meshes = attached_collision_object_.meshes;
-    collision_object.mesh_poses = attached_collision_object_.mesh_poses;
-    collision_object.planes = attached_collision_object_.planes;
-    collision_object.plane_poses = attached_collision_object_.plane_poses;
+    collision_object.primitives = attached_object.object.primitives;
+    collision_object.primitive_poses = attached_object.object.primitive_poses;
+    collision_object.meshes = attached_object.object.meshes;
+    collision_object.mesh_poses = attached_object.object.mesh_poses;
+    collision_object.planes = attached_object.object.planes;
+    collision_object.plane_poses = attached_object.object.plane_poses;
 
-    // Prepare PlanningScene message
+    // 5. Prepare the Planning Scene Message
     moveit_msgs::msg::PlanningScene planning_scene;
     planning_scene.is_diff = true;
-
-    // **Add this line to mark the robot_state as a diff**
     planning_scene.robot_state.is_diff = true;
-
-    // Remove the object from attached objects
-    moveit_msgs::msg::AttachedCollisionObject detach_object;
-    detach_object.object.id = object_id;
-    detach_object.link_name = eef_link_;
-    detach_object.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
     planning_scene.robot_state.attached_collision_objects.push_back(detach_object);
-
-    // Add the collision object back to the world
     planning_scene.world.collision_objects.push_back(collision_object);
 
-    // Send the PlanningScene message
+    // 6. Apply the Planning Scene
     auto apply_planning_scene_request = std::make_shared<moveit_msgs::srv::ApplyPlanningScene::Request>();
     apply_planning_scene_request->scene = planning_scene;
 
     while (!apply_planning_scene_client_->wait_for_service(std::chrono::seconds(1))) {
         if (!rclcpp::ok()) {
-            RCLCPP_ERROR(node_->get_logger(), "Interrupted while waiting for the service apply_planning_scene. Exiting.");
+            RCLCPP_ERROR(node_->get_logger(), "Interrupted while waiting for the apply_planning_scene service. Exiting.");
             return false;
         }
-        RCLCPP_INFO(node_->get_logger(), "Waiting for service apply_planning_scene...");
+        RCLCPP_INFO(node_->get_logger(), "Waiting for apply_planning_scene service...");
     }
 
     auto apply_future = apply_planning_scene_client_->async_send_request(apply_planning_scene_request);
@@ -597,7 +642,6 @@ bool PlanManager::detachObject(const std::string& object_id) {
         return false;
     }
 
-    RCLCPP_INFO(node_->get_logger(), "Object '%s' successfully detached and added back to world", object_id.c_str());
+    RCLCPP_INFO(node_->get_logger(), "Object '%s' successfully detached and added back to world.", object_id.c_str());
     return true;
 }
-

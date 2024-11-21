@@ -259,19 +259,10 @@ int main(int argc, char **argv)
         }
     }
 
-    // 3. tar_joint2 with high_speed
-    // 1. tar_joint1 with slow_speed
-    if (!plan_manager.executeJointMovement(tar_joint1, slow_speed))
+    // target_pose1 with standard_speed
+    if (!plan_manager.executePoseMovement(target_pose1, slow_speed))
     {
-        RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint1 after retries. Exiting.");
-        rclcpp::shutdown();
-        return 1;
-    }
-
-    // 4. target_pose2 with standard_speed
-    if (!plan_manager.executePoseMovement(target_pose2, standard_speed))
-    {
-        RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose2 after retries. Exiting.");
+        RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
     }
@@ -286,45 +277,53 @@ int main(int argc, char **argv)
         }
     }
 
-    // 5. tar_joint3 with slow_speed
-    if (!plan_manager.executeJointMovement(tar_joint3, slow_speed))
-    {
-        RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint3 after retries. Exiting.");
-        rclcpp::shutdown();
-        return 1;
-    }
-
-    // 6. target_pose3 with standard_speed
-    if (!plan_manager.executePoseMovement(target_pose3, standard_speed))
-    {
-        RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose3 after retries. Exiting.");
-        rclcpp::shutdown();
-        return 1;
-    }
-
-    // not using linear moves: the robot seems to be moving at max speed despite setting the scaling factors
-    // // 7. target_pose4 with standard_speed - linear move
-    // if (!plan_manager.executeLinearMovement(target_pose2, slow_speed)) {
-    //     RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
-    //     rclcpp::shutdown();
-    //     return 1;
-    // }
-
-    // 7. target_pose4 with standard_speed
-    if (!plan_manager.executePoseMovement(target_pose1, slow_speed))
-    {
-        RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
-        rclcpp::shutdown();
-        return 1;
-    }
-
-    // 8. tar_joint4 with high_speed
+    // tar_joint4 with high_speed
     if (!plan_manager.executeJointMovement(tar_joint4, high_speed))
     {
         RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint4 after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
     }
+
+    // // 1. tar_joint1 with slow_speed
+    // if (!plan_manager.executeJointMovement(tar_joint1, slow_speed))
+    // {
+    //     RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint1 after retries. Exiting.");
+    //     rclcpp::shutdown();
+    //     return 1;
+    // }
+
+    // // target_pose2 with standard_speed
+    // if (!plan_manager.executePoseMovement(target_pose2, standard_speed))
+    // {
+    //     RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose2 after retries. Exiting.");
+    //     rclcpp::shutdown();
+    //     return 1;
+    // }
+
+    // // tar_joint3 with slow_speed
+    // if (!plan_manager.executeJointMovement(tar_joint3, slow_speed))
+    // {
+    //     RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint3 after retries. Exiting.");
+    //     rclcpp::shutdown();
+    //     return 1;
+    // }
+
+    // // target_pose3 with standard_speed
+    // if (!plan_manager.executePoseMovement(target_pose3, standard_speed))
+    // {
+    //     RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose3 after retries. Exiting.");
+    //     rclcpp::shutdown();
+    //     return 1;
+    // }
+
+    // // not using linear moves: the robot seems to be moving at max speed despite setting the scaling factors
+    // // // target_pose4 with standard_speed - linear move
+    // // if (!plan_manager.executeLinearMovement(target_pose2, slow_speed)) {
+    // //     RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
+    // //     rclcpp::shutdown();
+    // //     return 1;
+    // // }
 
     RCLCPP_INFO(node->get_logger(), "Completed all movements successfully.");
     rclcpp::shutdown();

@@ -28,6 +28,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2/transform_datatypes.h>
 
 // Define a constant for service call failure
 #define SERVICE_CALL_FAILED 999
