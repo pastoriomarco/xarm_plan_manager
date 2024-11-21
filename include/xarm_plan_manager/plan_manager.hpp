@@ -108,7 +108,7 @@ public:
      */
     bool checkJointTargets(const std::vector<std::string>& joint_names_ordered,
                            const std::vector<double>& target_joint_positions,
-                           double tolerance = 0.05);
+                           double tolerance = 0.005);
 
     /**
      * @brief Check if current pose is within tolerance of target pose.
@@ -119,8 +119,8 @@ public:
      * @return true if pose is within tolerance, false otherwise.
      */
     bool checkPoseTarget(const geometry_msgs::msg::Pose& target_pose,
-                        double position_tolerance = 0.05,
-                        double orientation_tolerance = 0.05);
+                        double position_tolerance = 0.005,
+                        double orientation_tolerance = 0.005);
 
     /**
      * @brief Get the ordered list of joint names.
