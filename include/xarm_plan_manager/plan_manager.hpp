@@ -1,8 +1,6 @@
 #ifndef PLAN_MANAGER_HPP
 #define PLAN_MANAGER_HPP
 
-#include <signal.h>
-#include <thread>
 #include <rclcpp/rclcpp.hpp>
 
 #include <chrono>
@@ -10,18 +8,19 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <algorithm>
 
-#include <std_msgs/msg/bool.hpp>
 #include <xarm_msgs/srv/plan_pose.hpp>
 #include <xarm_msgs/srv/plan_joint.hpp>
 #include <xarm_msgs/srv/plan_exec.hpp>
 #include <xarm_msgs/srv/plan_single_straight.hpp>
 #include <xarm_msgs/srv/set_float32_list.hpp>
 #include <xarm_msgs/srv/call.hpp>
+
 #include <moveit_msgs/srv/get_planning_scene.hpp>
+
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <geometry_msgs/msg/pose.hpp>
+
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
