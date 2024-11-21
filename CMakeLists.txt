@@ -14,7 +14,6 @@ endif()
 # Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(xarm_msgs REQUIRED)
 find_package(moveit REQUIRED)
@@ -34,13 +33,12 @@ add_executable(plan_manager_node
 # Specify libraries to link against
 ament_target_dependencies(plan_manager_node
   rclcpp
-  std_msgs
   geometry_msgs
   xarm_msgs
   moveit
   moveit_ros_planning_interface
   moveit_msgs
-  tf2_ros  # Linked tf2_ros library
+  tf2_ros
 )
 
 # Install the executable to the appropriate location
