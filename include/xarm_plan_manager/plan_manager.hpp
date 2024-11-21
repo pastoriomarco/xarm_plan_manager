@@ -16,6 +16,10 @@
 #include <xarm_msgs/srv/set_float32_list.hpp>
 #include <xarm_msgs/srv/call.hpp>
 
+#include <moveit_msgs/msg/planning_scene.hpp>
+#include <moveit_msgs/msg/collision_object.hpp>
+#include <moveit_msgs/msg/attached_collision_object.hpp>
+#include <moveit_msgs/srv/apply_planning_scene.hpp>
 #include <moveit_msgs/srv/get_planning_scene.hpp>
 
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -136,6 +140,22 @@ public:
      */
     void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
 
+    /**
+     * @brief Attach a collision object to the robot's end-effector.
+     * 
+     * @param object_id ID of the object to attach.
+     * @return true if successful, false otherwise.
+     */
+    bool attachObject(const std::string& object_id);
+
+    /**
+     * @brief Detach a collision object from the robot's end-effector.
+     * 
+     * @param object_id ID of the object to detach.
+     * @return true if successful, false otherwise.
+     */
+    bool detachObject(const std::string& object_id);
+
 private:
     // Member variables
     rclcpp::Node::SharedPtr node_;
@@ -167,6 +187,13 @@ private:
     // Retrieved base and eef links
     std::string base_link_;
     std::string eef_link_;
+
+    // Service clients for planning scene manipulation
+    rclcpp::Client<moveit_msgs::srv::GetPlanningScene>::SharedPtr get_planning_scene_client_;
+    rclcpp::Client<moveit_msgs::srv::ApplyPlanningScene>::SharedPtr apply_planning_scene_client_;
+
+    // Store the attached collision object
+    moveit_msgs::msg::CollisionObject attached_collision_object_;
 
     /**
      * @brief Initialize the ordered list of joint names based on DOF.

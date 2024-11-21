@@ -81,6 +81,7 @@ int main(int argc, char **argv)
     request->components.components = moveit_msgs::msg::PlanningSceneComponents::WORLD_OBJECT_GEOMETRY;
 
     geometry_msgs::msg::Pose selected_object_pose;
+    std::string selected_object_id;
     bool object_found = false;
     auto future = planning_scene_client->async_send_request(request);
     if (rclcpp::spin_until_future_complete(node, future) == rclcpp::FutureReturnCode::SUCCESS)
@@ -94,7 +95,8 @@ int main(int argc, char **argv)
             {
                 // Use the main pose field instead of primitive_poses to get the correct pose
                 selected_object_pose = object.pose;
-                RCLCPP_INFO(node->get_logger(), "Found object with ID: %s", object.id.c_str());
+                selected_object_id = object.id;
+                RCLCPP_INFO(node->get_logger(), "Found object with ID: %s", selected_object_id.c_str());
                 RCLCPP_INFO_STREAM(node->get_logger(), "x " << selected_object_pose.position.x << ", y " << selected_object_pose.position.y << ", z " << selected_object_pose.position.z);
                 object_found = true;
                 break;
@@ -208,6 +210,8 @@ int main(int argc, char **argv)
     target_pose3.orientation.w = 0;
 
     selected_object_pose.orientation = target_pose1.orientation;
+    geometry_msgs::msg::Pose selected_object_approach_pose = selected_object_pose;
+    selected_object_approach_pose.position.z = selected_object_pose.position.z + 0.1;
 
     // Example scaling factors to be set between movements
     std::vector<float> slow_speed = {0.1f, 0.1f};     // Example values
@@ -215,28 +219,51 @@ int main(int argc, char **argv)
     std::vector<float> high_speed = {0.5f, 0.5f};     // Example values
 
     // Execute movements with retry logic using PlanManager
-    // 1. tar_joint1 with slow_speed
-    if (!plan_manager.executeJointMovement(tar_joint1, slow_speed))
+    if (!plan_manager.executeJointMovement(tar_joint2, high_speed))
     {
-        RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint1 after retries. Exiting.");
+        RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint2 after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
     }
 
     if (object_found)
-    { // 2. target_pose1 with standard_speed
+    {
+        // 2. object grasp with standard_speed
+        if (!plan_manager.executePoseMovement(selected_object_approach_pose, standard_speed))
+        {
+            RCLCPP_ERROR(node->get_logger(), "Failed to execute selected_object_approach_pose after retries. Exiting.");
+            rclcpp::shutdown();
+            return 1;
+        }
+
         if (!plan_manager.executePoseMovement(selected_object_pose, standard_speed))
         {
-            RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose1 after retries. Exiting.");
+            RCLCPP_ERROR(node->get_logger(), "Failed to execute selected_object_pose after retries. Exiting.");
+            rclcpp::shutdown();
+            return 1;
+        }
+
+        // After moving to selected_object_pose
+        if (!plan_manager.attachObject(selected_object_id))
+        {
+            RCLCPP_ERROR(node->get_logger(), "Failed to attach object '%s'. Exiting.", selected_object_id.c_str());
+            rclcpp::shutdown();
+            return 1;
+        }
+
+        if (!plan_manager.executePoseMovement(selected_object_approach_pose, standard_speed))
+        {
+            RCLCPP_ERROR(node->get_logger(), "Failed to execute selected_object_approach_pose after retries. Exiting.");
             rclcpp::shutdown();
             return 1;
         }
     }
 
     // 3. tar_joint2 with high_speed
-    if (!plan_manager.executeJointMovement(tar_joint2, high_speed))
+    // 1. tar_joint1 with slow_speed
+    if (!plan_manager.executeJointMovement(tar_joint1, slow_speed))
     {
-        RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint2 after retries. Exiting.");
+        RCLCPP_ERROR(node->get_logger(), "Failed to execute tar_joint1 after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
     }
@@ -247,6 +274,16 @@ int main(int argc, char **argv)
         RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose2 after retries. Exiting.");
         rclcpp::shutdown();
         return 1;
+    }
+
+    if (object_found)
+    { // After moving to target_pose2
+        if (!plan_manager.detachObject(selected_object_id))
+        {
+            RCLCPP_ERROR(node->get_logger(), "Failed to detach object '%s'. Exiting.", selected_object_id.c_str());
+            rclcpp::shutdown();
+            return 1;
+        }
     }
 
     // 5. tar_joint3 with slow_speed

@@ -23,6 +23,10 @@ PlanManager::PlanManager(rclcpp::Node::SharedPtr node, int dof,
     get_base_link_client_ = node_->create_client<xarm_msgs::srv::Call>("get_base_link");
     get_eef_link_client_ = node_->create_client<xarm_msgs::srv::Call>("get_eef_link");
 
+    // Initialize the new service clients
+    get_planning_scene_client_ = node_->create_client<moveit_msgs::srv::GetPlanningScene>("/get_planning_scene");
+    apply_planning_scene_client_ = node_->create_client<moveit_msgs::srv::ApplyPlanningScene>("/apply_planning_scene");
+
     // Initialize joint_names_ordered_ based on dof
     initializeJointNames(dof);
 
@@ -437,3 +441,163 @@ bool PlanManager::executeLinearMovement(
 const std::vector<std::string>& PlanManager::getJointNames() const {
     return joint_names_ordered_;
 }
+
+// Implementation of attachObject
+bool PlanManager::attachObject(const std::string& object_id) {
+    // Get the collision object from the planning scene
+    auto request = std::make_shared<moveit_msgs::srv::GetPlanningScene::Request>();
+    request->components.components = moveit_msgs::msg::PlanningSceneComponents::WORLD_OBJECT_GEOMETRY;
+
+    // Wait for the service and call it
+    while (!get_planning_scene_client_->wait_for_service(std::chrono::seconds(1))) {
+        if (!rclcpp::ok()) {
+            RCLCPP_ERROR(node_->get_logger(), "Interrupted while waiting for the service get_planning_scene. Exiting.");
+            return false;
+        }
+        RCLCPP_INFO(node_->get_logger(), "Waiting for service get_planning_scene...");
+    }
+
+    auto future = get_planning_scene_client_->async_send_request(request);
+    if (rclcpp::spin_until_future_complete(node_, future) != rclcpp::FutureReturnCode::SUCCESS) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to call service get_planning_scene");
+        return false;
+    }
+
+    auto response = future.get();
+    const auto& collision_objects = response->scene.world.collision_objects;
+
+    moveit_msgs::msg::CollisionObject object_to_attach;
+    bool object_found = false;
+
+    for (const auto& object : collision_objects) {
+        if (object.id == object_id) {
+            object_to_attach = object;
+            object_found = true;
+            break;
+        }
+    }
+
+    if (!object_found) {
+        RCLCPP_ERROR(node_->get_logger(), "Object with id '%s' not found in planning scene.", object_id.c_str());
+        return false;
+    }
+
+    // Store the object for later use in detachment
+    attached_collision_object_ = object_to_attach;
+
+    // Create AttachedCollisionObject
+    moveit_msgs::msg::AttachedCollisionObject attached_object;
+    attached_object.link_name = eef_link_;
+    attached_object.object = object_to_attach;
+    attached_object.touch_links = std::vector<std::string>({eef_link_});
+
+    // Prepare PlanningScene message
+    moveit_msgs::msg::PlanningScene planning_scene;
+    planning_scene.is_diff = true;
+    planning_scene.robot_state.attached_collision_objects.push_back(attached_object);
+    planning_scene.world.collision_objects.clear(); // Remove the object from world
+
+    // Send the PlanningScene message
+    auto apply_planning_scene_request = std::make_shared<moveit_msgs::srv::ApplyPlanningScene::Request>();
+    apply_planning_scene_request->scene = planning_scene;
+
+    while (!apply_planning_scene_client_->wait_for_service(std::chrono::seconds(1))) {
+        if (!rclcpp::ok()) {
+            RCLCPP_ERROR(node_->get_logger(), "Interrupted while waiting for the service apply_planning_scene. Exiting.");
+            return false;
+        }
+        RCLCPP_INFO(node_->get_logger(), "Waiting for service apply_planning_scene...");
+    }
+
+    auto apply_future = apply_planning_scene_client_->async_send_request(apply_planning_scene_request);
+    if (rclcpp::spin_until_future_complete(node_, apply_future) != rclcpp::FutureReturnCode::SUCCESS) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to call service apply_planning_scene");
+        return false;
+    }
+
+    auto apply_response = apply_future.get();
+    if (!apply_response->success) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to apply planning scene to attach object.");
+        return false;
+    }
+
+    RCLCPP_INFO(node_->get_logger(), "Object '%s' successfully attached to '%s'", object_id.c_str(), eef_link_.c_str());
+    return true;
+}
+
+// Implementation of detachObject
+bool PlanManager::detachObject(const std::string& object_id) {
+    // Get the current pose of the eef_link in the base_link frame
+    geometry_msgs::msg::TransformStamped transformStamped;
+    try {
+        transformStamped = tf_buffer_.lookupTransform(base_link_, eef_link_, tf2::TimePointZero, std::chrono::seconds(1));
+    } catch (tf2::TransformException &ex) {
+        RCLCPP_WARN(node_->get_logger(), "TF lookup failed: %s", ex.what());
+        return false;
+    }
+
+    // Convert Transform to Pose
+    geometry_msgs::msg::Pose object_pose;
+    object_pose.position.x = transformStamped.transform.translation.x;
+    object_pose.position.y = transformStamped.transform.translation.y;
+    object_pose.position.z = transformStamped.transform.translation.z;
+    object_pose.orientation = transformStamped.transform.rotation;
+
+    // Create CollisionObject to add back to the world
+    moveit_msgs::msg::CollisionObject collision_object;
+    collision_object.id = attached_collision_object_.id;
+    collision_object.header.frame_id = base_link_;
+    collision_object.pose = object_pose;
+    collision_object.operation = moveit_msgs::msg::CollisionObject::ADD;
+    collision_object.primitives = attached_collision_object_.primitives;
+    collision_object.primitive_poses = attached_collision_object_.primitive_poses;
+    collision_object.meshes = attached_collision_object_.meshes;
+    collision_object.mesh_poses = attached_collision_object_.mesh_poses;
+    collision_object.planes = attached_collision_object_.planes;
+    collision_object.plane_poses = attached_collision_object_.plane_poses;
+
+    // Prepare PlanningScene message
+    moveit_msgs::msg::PlanningScene planning_scene;
+    planning_scene.is_diff = true;
+
+    // **Add this line to mark the robot_state as a diff**
+    planning_scene.robot_state.is_diff = true;
+
+    // Remove the object from attached objects
+    moveit_msgs::msg::AttachedCollisionObject detach_object;
+    detach_object.object.id = object_id;
+    detach_object.link_name = eef_link_;
+    detach_object.object.operation = moveit_msgs::msg::CollisionObject::REMOVE;
+    planning_scene.robot_state.attached_collision_objects.push_back(detach_object);
+
+    // Add the collision object back to the world
+    planning_scene.world.collision_objects.push_back(collision_object);
+
+    // Send the PlanningScene message
+    auto apply_planning_scene_request = std::make_shared<moveit_msgs::srv::ApplyPlanningScene::Request>();
+    apply_planning_scene_request->scene = planning_scene;
+
+    while (!apply_planning_scene_client_->wait_for_service(std::chrono::seconds(1))) {
+        if (!rclcpp::ok()) {
+            RCLCPP_ERROR(node_->get_logger(), "Interrupted while waiting for the service apply_planning_scene. Exiting.");
+            return false;
+        }
+        RCLCPP_INFO(node_->get_logger(), "Waiting for service apply_planning_scene...");
+    }
+
+    auto apply_future = apply_planning_scene_client_->async_send_request(apply_planning_scene_request);
+    if (rclcpp::spin_until_future_complete(node_, apply_future) != rclcpp::FutureReturnCode::SUCCESS) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to call service apply_planning_scene");
+        return false;
+    }
+
+    auto apply_response = apply_future.get();
+    if (!apply_response->success) {
+        RCLCPP_ERROR(node_->get_logger(), "Failed to apply planning scene to detach object.");
+        return false;
+    }
+
+    RCLCPP_INFO(node_->get_logger(), "Object '%s' successfully detached and added back to world", object_id.c_str());
+    return true;
+}
+
