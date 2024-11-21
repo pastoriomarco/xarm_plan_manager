@@ -3,10 +3,10 @@
 #include "xarm_plan_manager/plan_manager.hpp"
 
 // Joint state callback function to parse the content of /joint_states topic
-void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg, sensor_msgs::msg::JointState &local_joint_state)
+void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg, sensor_msgs::msg::JointState &current_joint_state_)
 {
-    // Copy joint state data to the local_joint_state variable
-    local_joint_state = *msg;
+    // Copy joint state data to the current_joint_state_ variable
+    current_joint_state_ = *msg;
 }
 
 // Implementation of main
@@ -17,7 +17,6 @@ int main(int argc, char **argv)
     node_options.automatically_declare_parameters_from_overrides(true);
     auto node = rclcpp::Node::make_shared("plan_manager_node", node_options);
     RCLCPP_INFO(node->get_logger(), "plan_manager_node start");
-    signal(SIGINT, exit_sig_handler);
 
     int dof;
     node->get_parameter_or("dof", dof, 7);
@@ -58,12 +57,12 @@ int main(int argc, char **argv)
     PlanManager plan_manager(node, dof, std::chrono::seconds(30), std::chrono::seconds(30), 3);
 
     // Local variable for joint states
-    sensor_msgs::msg::JointState local_joint_state;
+    sensor_msgs::msg::JointState current_joint_state_;
 
     // Subscribe to /joint_states
     auto joint_state_sub = node->create_subscription<sensor_msgs::msg::JointState>(
-        "/joint_states", 10, [&local_joint_state](const sensor_msgs::msg::JointState::SharedPtr msg)
-        { jointStateCallback(msg, local_joint_state); });
+        "/joint_states", 10, [&current_joint_state_](const sensor_msgs::msg::JointState::SharedPtr msg)
+        { jointStateCallback(msg, current_joint_state_); });
 
     // Parameter to determine which object to find
     std::string object_name_filter;
@@ -114,7 +113,7 @@ int main(int argc, char **argv)
 
     // Wait until the first joint state is received
     RCLCPP_INFO(node->get_logger(), "Waiting for first joint state...");
-    while (rclcpp::ok() && local_joint_state.name.empty())
+    while (rclcpp::ok() && current_joint_state_.name.empty())
     {
         rclcpp::spin_some(node);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -123,9 +122,9 @@ int main(int argc, char **argv)
 
     // Create a map for joint positions by name
     std::unordered_map<std::string, double> joint_positions;
-    for (size_t i = 0; i < local_joint_state.name.size(); ++i)
+    for (size_t i = 0; i < current_joint_state_.name.size(); ++i)
     {
-        joint_positions[local_joint_state.name[i]] = local_joint_state.position[i];
+        joint_positions[current_joint_state_.name[i]] = current_joint_state_.position[i];
     }
 
     // Define target joint positions based on DOF and robot_type

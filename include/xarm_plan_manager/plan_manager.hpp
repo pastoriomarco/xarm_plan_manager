@@ -40,13 +40,6 @@ struct has_success<T, std::__void_t<decltype(std::declval<T>().success)>> : std:
 class PlanManager;
 
 /**
- * @brief Signal handler for graceful shutdown.
- * 
- * @param signum Signal number.
- */
-void exit_sig_handler(int signum);
-
-/**
  * @brief PlanManager class for managing robot arm movements.
  */
 class PlanManager {

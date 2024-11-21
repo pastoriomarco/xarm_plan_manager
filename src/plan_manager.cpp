@@ -1,13 +1,5 @@
 #include "xarm_plan_manager/plan_manager.hpp"
 
-// Implementation of exit_sig_handler as a free function
-void exit_sig_handler(int signum)
-{
-    (void)signum;
-    fprintf(stderr, "[plan_manager_node] Ctrl-C caught, exiting process...\n");
-    rclcpp::shutdown();
-}
-
 // Implementation of PlanManager constructor
 PlanManager::PlanManager(rclcpp::Node::SharedPtr node, int dof, 
                          std::chrono::seconds joint_tout,
