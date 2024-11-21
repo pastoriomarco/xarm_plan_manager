@@ -275,6 +275,16 @@ int main(int argc, char **argv)
             rclcpp::shutdown();
             return 1;
         }
+
+        // exit move from target_pose1 with standard_speed
+        geometry_msgs::msg::Pose exit_target_pose1 = target_pose1;
+        exit_target_pose1.position.z = exit_target_pose1.position.z + 0.1;
+        if (!plan_manager.executePoseMovement(exit_target_pose1, slow_speed))
+        {
+            RCLCPP_ERROR(node->get_logger(), "Failed to execute target_pose4 linear move after retries. Exiting.");
+            rclcpp::shutdown();
+            return 1;
+        }
     }
 
     // tar_joint4 with high_speed
