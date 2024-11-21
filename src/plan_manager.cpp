@@ -477,9 +477,6 @@ bool PlanManager::attachObject(const std::string& object_id) {
         return false;
     }
 
-    // Store the object for later use in detachment
-    attached_collision_object_ = object_to_attach;
-
     // Create AttachedCollisionObject
     moveit_msgs::msg::AttachedCollisionObject attached_object;
     attached_object.link_name = eef_link_;

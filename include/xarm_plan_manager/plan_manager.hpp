@@ -193,9 +193,6 @@ private:
     rclcpp::Client<moveit_msgs::srv::GetPlanningScene>::SharedPtr get_planning_scene_client_;
     rclcpp::Client<moveit_msgs::srv::ApplyPlanningScene>::SharedPtr apply_planning_scene_client_;
 
-    // Store the attached collision object
-    moveit_msgs::msg::CollisionObject attached_collision_object_;
-
     /**
      * @brief Initialize the ordered list of joint names based on DOF.
      * 
