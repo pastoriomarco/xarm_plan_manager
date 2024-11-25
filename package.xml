@@ -3,7 +3,7 @@
 <package format="3">
   <name>xarm_plan_manager</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Plan manager package for Ufactory Xarm, UF850 and Lite cobots</description>
   <maintainer email="pastoriomarco@gmail.com">tndlux</maintainer>
   <license>Apache-2.0</license>
 
